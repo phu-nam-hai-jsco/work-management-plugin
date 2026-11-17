@@ -1,6 +1,5 @@
 // Ban TypeScript cua convert: tien xu ly bang JS/TS thuan + goi WeasyPrint CLI.
 // Dung: bun src/cli.ts <thu-muc-hoa-don> <file-pdf-ra> [--weasyprint <duong-dan>]
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -70,7 +69,7 @@ export async function convertInvoiceToPdf(
   outPdf: string,
   weasyprint = 'weasyprint',
 ): Promise<void> {
-  const raw = fs.readFileSync(path.join(invoiceDir, 'invoice.html'), 'utf8');
+  const raw = await Bun.file(path.join(invoiceDir, 'invoice.html')).text();
   const html = await preprocessInvoiceHtml(raw);
 
   // Don thu muc tam work/ do ban cu de lai trong thu muc hoa don (best-effort)
@@ -88,15 +87,22 @@ export async function convertInvoiceToPdf(
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'html2pdf-'));
   const tmpHtml = path.join(tmpDir, 'invoice-print.html');
   try {
-    fs.writeFileSync(tmpHtml, html);
-    const r = spawnSync(
-      weasyprint,
-      ['--base-url', path.resolve(invoiceDir), '--encoding', 'utf-8', tmpHtml, outPdf],
-      { encoding: 'utf8' },
-    );
-    if (r.error) throw new Error(`khong chay duoc weasyprint: ${r.error.message}`);
-    if (r.status !== 0) throw new Error(`weasyprint loi: ${r.stderr}`);
-    const head = fs.readFileSync(outPdf).subarray(0, 4).toString('latin1');
+    await Bun.write(tmpHtml, html);
+    let proc: ReturnType<typeof Bun.spawnSync>;
+    try {
+      proc = Bun.spawnSync(
+        [weasyprint, '--base-url', path.resolve(invoiceDir), '--encoding', 'utf-8', tmpHtml, outPdf],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`khong chay duoc weasyprint: ${msg}`);
+    }
+    if (proc.exitCode !== 0) {
+      const stderr = proc.stderr ? proc.stderr.toString() : '';
+      throw new Error(`weasyprint loi: ${stderr}`);
+    }
+    const head = await Bun.file(outPdf).slice(0, 4).text();
     if (head !== '%PDF') throw new Error('file ra khong phai PDF');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
