@@ -46,7 +46,11 @@ export async function preprocessInvoiceHtml(html) {
     return a + (cn ? cn[1] : dn) + b;
   });
   // 3) Bo script + the an, chen CSS ep 1 trang
-  html = html.replace(/<script\b[^>]*\bsrc=["'](?:\.\/)?details\.js["'][^>]*>\s*<\/script>/gi, '');
+  let prevHtml;
+  do {
+    prevHtml = html;
+    html = html.replace(/<script\b[^>]*\bsrc=["'](?:\.\/)?details\.js["'][^>]*>\s*<\/script>/gi, '');
+  } while (html !== prevHtml);
   html = html.replace(/<input\b[^>]*\bid=["']qrcodeContent["'][^>]*>/gi, '');
   if (/<\/head>/i.test(html)) {
     return html.replace(/<\/head>/i, () => FIT_ONE_PAGE_CSS + '</head>');
