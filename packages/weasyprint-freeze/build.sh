@@ -8,7 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 [ -d .venv ] || python3 -m venv .venv
 if [ -f .venv/Scripts/activate ]; then . .venv/Scripts/activate; else . .venv/bin/activate; fi
-pip install -q --upgrade pip weasyprint pyinstaller
+python -m pip install -q --upgrade pip
+python -m pip install -q weasyprint pyinstaller
 
 EXTRA=()
 MSYS_BIN=""
