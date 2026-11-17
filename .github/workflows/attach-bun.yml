@@ -1,0 +1,105 @@
+name: Đính kèm Bun (Windows x64)
+
+# Tải bản phát hành Bun (bun-windows-x64.zip, bun-windows-x64-baseline.zip), giải nén
+# thành file .exe, đính vào release của plugin và ghi vào manifest.json để app desktop kéo về.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bun-version:
+        description: "Phiên bản Bun: 'latest' hoặc số phiên bản (vd 1.4.4)"
+        default: latest
+        required: false
+      release-tag:
+        description: "Tag release của plugin để đính kèm (bỏ trống = releaseTag trong manifest.json)"
+        default: ""
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: attach-bun
+  cancel-in-progress: false
+
+env:
+  # Cùng nguồn với .github/actions/setup-bun của repo phu-nam-hai-jsco/bun
+  BUN_DOWNLOAD_URL: https://pub-5e11e972747a44bf9aaf9394f185a982.r2.dev/releases
+  TARGET: x86_64-pc-windows-msvc
+
+jobs:
+  attach-bun:
+    name: Tải Bun và đính vào release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tải và kiểm tra checksum
+        env:
+          BUN_VERSION: ${{ inputs.bun-version }}
+        run: |
+          BUN_VERSION="${BUN_VERSION#bun-v}"
+          BUN_VERSION="${BUN_VERSION#v}"
+          case "$BUN_VERSION" in
+            "" | latest) release="latest" ;;
+            *)
+              if [[ ! "$BUN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "::error::Phiên bản Bun không hợp lệ: $BUN_VERSION"
+                exit 1
+              fi
+              release="bun-v${BUN_VERSION}"
+              ;;
+          esac
+          mkdir -p download dist
+          cd download
+          for name in bun-windows-x64.zip bun-windows-x64-baseline.zip SHASUMS256.txt; do
+            curl -fsSLO "${BUN_DOWNLOAD_URL}/${release}/${name}" --retry 5
+          done
+          grep -E '  bun-windows-x64(-baseline)?\.zip$' SHASUMS256.txt > expected.txt
+          test "$(wc -l < expected.txt)" -eq 2
+          sha256sum -c expected.txt
+          unzip -q bun-windows-x64.zip
+          unzip -q bun-windows-x64-baseline.zip
+          mv bun-windows-x64/bun.exe "../dist/bun-${TARGET}.exe"
+          mv bun-windows-x64-baseline/bun.exe "../dist/bun-baseline-${TARGET}.exe"
+
+      - name: Chạy thử và lấy phiên bản
+        id: version
+        run: |
+          version="$("dist/bun-${TARGET}.exe" --version | tr -d '\r')"
+          baseline="$("dist/bun-baseline-${TARGET}.exe" --version | tr -d '\r')"
+          echo "bun: $version, bun-baseline: $baseline"
+          if [[ "$version" != "$baseline" || ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Phiên bản không khớp hoặc không hợp lệ"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cập nhật manifest.json và checksums
+        run: |
+          node scripts/update-bun-manifest.mjs dist "${{ steps.version.outputs.version }}"
+          cp "dist/bun-${TARGET}.exe" dist/bun.exe
+          cp "dist/bun-baseline-${TARGET}.exe" dist/bun-baseline.exe
+
+      - name: Đính vào release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          tag="${RELEASE_TAG:-$(node -p "require('./manifest.json').releaseTag")}"
+          gh release upload "$tag" dist/*.exe dist/*.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Commit manifest
+        run: |
+          git add manifest.json checksums
+          if git diff --cached --quiet; then
+            echo "manifest.json không đổi"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: bun ${{ steps.version.outputs.version }} (windows x64, baseline)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
