@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "releaseTag": "v1.0.0",
+  "assets": {
+    "x86_64-pc-windows-msvc": {
+      "html2pdf": {
+        "file": "html2pdf-x86_64-pc-windows-msvc.exe",
+        "alias": "html2pdf.exe",
+        "sha256": "3d497ac3da7fb5ff4cf9a7740cc5eb74e283719c3b6cd673c47da2f1a3379949",
+        "size": 115404288
+      },
+      "weasyprint": {
+        "file": "weasyprint-x86_64-pc-windows-msvc.exe",
+        "alias": "weasyprint.exe",
+        "sha256": "4c05e4efc531f942bb5cfe33196d7cf1330621d7b38295bb9d2e283a77ff49c1",
+        "size": 40335113
+      }
+    }
+  }
+}

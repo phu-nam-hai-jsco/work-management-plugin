@@ -1,0 +1,13 @@
+{
+  "name": "html2pdf-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "qrcode": "^1.5.4" },
+  "scripts": {
+    "build:linux": "bun build src/cli.mjs --compile --target=bun-linux-x64 --outfile binaries/html2pdf-x86_64-unknown-linux-gnu",
+    "build:windows": "bun build src/cli.mjs --compile --target=bun-windows-x64 --outfile binaries/html2pdf-x86_64-pc-windows-msvc.exe",
+    "build:mac-arm": "bun build src/cli.mjs --compile --target=bun-darwin-arm64 --outfile binaries/html2pdf-aarch64-apple-darwin"
+  }
+}
+
