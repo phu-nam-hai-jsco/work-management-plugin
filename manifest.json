@@ -14,6 +14,20 @@
         "alias": "weasyprint.exe",
         "sha256": "4f53bac3422deb82a08a8cc12f0ee71cdcf8a7ae458f0fa89febf673c91908dc",
         "size": 38247783
+      },
+      "bun": {
+        "file": "bun-x86_64-pc-windows-msvc.exe",
+        "alias": "bun.exe",
+        "version": "1.4.4",
+        "sha256": "cb1d8e6564e655e49d30cead359750a1cbbd12f42651caa4b62244d7bd93c244",
+        "size": 115281496
+      },
+      "bun-baseline": {
+        "file": "bun-baseline-x86_64-pc-windows-msvc.exe",
+        "alias": "bun-baseline.exe",
+        "version": "1.4.4",
+        "sha256": "cb1d8e6564e655e49d30cead359750a1cbbd12f42651caa4b62244d7bd93c244",
+        "size": 115281496
       }
     },
     "x86_64-unknown-linux-gnu": {
@@ -28,6 +42,20 @@
         "alias": "weasyprint",
         "sha256": "003e35da0953f3d1fa7984d0a11631a0c287471fac32eb32e3ec88d59499e0e7",
         "size": 52165992
+      },
+      "bun": {
+        "file": "bun-x86_64-unknown-linux-gnu",
+        "alias": "bun",
+        "version": "1.4.4",
+        "sha256": "10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235",
+        "size": 107308936
+      },
+      "bun-baseline": {
+        "file": "bun-baseline-x86_64-unknown-linux-gnu",
+        "alias": "bun-baseline",
+        "version": "1.4.4",
+        "sha256": "10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235",
+        "size": 107308936
       }
     }
   }
