@@ -103,7 +103,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release-tag }}
         run: |
           tag="${RELEASE_TAG:-$(node -p "require('./manifest.json').releaseTag")}"
-          gh release upload "$tag" dist/bun* dist/*.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$tag" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Commit manifest
         run: |
