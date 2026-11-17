@@ -1,0 +1,203 @@
+name: Build & Phát hành sidecar (Windows + Linux)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: "Tag release để đính kèm (bỏ trống = releaseTag trong manifest.json)"
+        default: ""
+        required: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-sidecars
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build Windows x64 (html2pdf + weasyprint)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build html2pdf (Rust)
+        shell: pwsh
+        run: |
+          cd packages/html2pdf
+          cargo build --release --locked
+          New-Item -ItemType Directory -Force ../../dist | Out-Null
+          Copy-Item target/release/html2pdf.exe ../../dist/html2pdf-x86_64-pc-windows-msvc.exe -Force
+          Copy-Item target/release/html2pdf.exe ../../dist/html2pdf.exe -Force
+          & ../../dist/html2pdf.exe --ping
+
+      - name: Setup MSYS2 (GTK/Pango/Cairo DLLs)
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-pango
+            mingw-w64-x86_64-cairo
+            mingw-w64-x86_64-gdk-pixbuf2
+            mingw-w64-x86_64-libffi
+            mingw-w64-x86_64-glib2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build weasyprint onefile (PyInstaller)
+        shell: bash
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          bash packages/weasyprint-freeze/build.sh
+          cp packages/weasyprint-freeze/dist/weasyprint.exe dist/weasyprint-x86_64-pc-windows-msvc.exe
+          cp packages/weasyprint-freeze/dist/weasyprint.exe dist/weasyprint.exe
+          ./dist/weasyprint.exe --version
+
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          cd dist
+          for f in html2pdf.exe html2pdf-x86_64-pc-windows-msvc.exe weasyprint.exe weasyprint-x86_64-pc-windows-msvc.exe; do
+            sha256sum "$f" > "$f.sha256"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/*
+
+  build-linux:
+    name: Build Linux x64 (html2pdf + weasyprint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build html2pdf (Rust)
+        run: |
+          cd packages/html2pdf
+          cargo build --release --locked
+          mkdir -p ../../dist
+          cp target/release/html2pdf ../../dist/html2pdf-x86_64-unknown-linux-gnu
+          cp target/release/html2pdf ../../dist/html2pdf
+          chmod +x ../../dist/html2pdf ../../dist/html2pdf-x86_64-unknown-linux-gnu
+          ../../dist/html2pdf --ping
+
+      - name: Install WeasyPrint system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
+            libcairo2 libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu-core
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build weasyprint onefile (PyInstaller)
+        run: |
+          bash packages/weasyprint-freeze/build.sh
+          cp packages/weasyprint-freeze/dist/weasyprint dist/weasyprint-x86_64-unknown-linux-gnu
+          cp packages/weasyprint-freeze/dist/weasyprint dist/weasyprint
+          chmod +x dist/weasyprint dist/weasyprint-x86_64-unknown-linux-gnu
+          ./dist/weasyprint --version
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd dist
+          for f in html2pdf html2pdf-x86_64-unknown-linux-gnu weasyprint weasyprint-x86_64-unknown-linux-gnu; do
+            sha256sum "$f" > "$f.sha256"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: dist/*
+
+  publish:
+    name: Phát hành lên GitHub Release & cập nhật manifest
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-windows
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-linux
+          path: dist
+
+      - name: Cập nhật manifest.json và checksums
+        run: |
+          node -e '
+            const fs = require("fs");
+            const crypto = require("crypto");
+            const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+            const info = (file) => {
+              const buf = fs.readFileSync("dist/" + file);
+              return {
+                sha256: crypto.createHash("sha256").update(buf).digest("hex"),
+                size: buf.length,
+              };
+            };
+            const winHtml = info("html2pdf-x86_64-pc-windows-msvc.exe");
+            const winWp = info("weasyprint-x86_64-pc-windows-msvc.exe");
+            const linHtml = info("html2pdf-x86_64-unknown-linux-gnu");
+            const linWp = info("weasyprint-x86_64-unknown-linux-gnu");
+            manifest.assets["x86_64-pc-windows-msvc"] = {
+              html2pdf: { file: "html2pdf-x86_64-pc-windows-msvc.exe", alias: "html2pdf.exe", ...winHtml },
+              weasyprint: { file: "weasyprint-x86_64-pc-windows-msvc.exe", alias: "weasyprint.exe", ...winWp },
+            };
+            manifest.assets["x86_64-unknown-linux-gnu"] = {
+              html2pdf: { file: "html2pdf-x86_64-unknown-linux-gnu", alias: "html2pdf", ...linHtml },
+              weasyprint: { file: "weasyprint-x86_64-unknown-linux-gnu", alias: "weasyprint", ...linWp },
+            };
+            fs.writeFileSync("manifest.json", JSON.stringify(manifest, null, 2) + "\n");
+          '
+          mkdir -p checksums
+          cp dist/*.sha256 checksums/
+
+      - name: Đính vào GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.release-tag }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          elif [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$(node -p "require('./manifest.json').releaseTag")"
+          fi
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes "Sidecar binaries (Windows x64 + Linux x64)" --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release upload "$tag" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Commit manifest & checksums
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json checksums
+          if git diff --cached --quiet; then
+            echo "manifest.json không đổi"
+            exit 0
+          fi
+          git commit -m "chore: update manifest & checksums for Windows + Linux"
+          git push origin HEAD:main
